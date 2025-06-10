@@ -1,24 +1,53 @@
 from typing import Dict
 from dotenv import load_dotenv
 
-# 프로젝트 내부 모듈 임포트
+# 프로젝트 내부 모듈 임포트 (Hugging Face 버전)
 from .api.gpt_client import GPTClient
 from .database.db_manager import DatabaseManager
-from .utils.emotion_analyzer import EmotionAnalyzer
-from .utils.music_recommender import MusicRecommender
+from .utils.emotion_analyzer_hf import EmotionAnalyzer  # HF 버전으로 변경
+from .utils.music_recommender_hf import MusicRecommender  # HF 버전으로 변경
 
 # 환경변수 로드
 load_dotenv()
 
 class NovelProcessor:
-    """소설 생성 및 처리를 담당하는 메인 클래스"""
+    """소설 생성 및 처리를 담당하는 메인 클래스 (Hugging Face 모델 버전)"""
     
-    def __init__(self):
-        """소설 처리에 필요한 모든 클라이언트 초기화"""
+    def __init__(self, use_hf_model=True, hf_model_name=None):
+        """
+        소설 처리에 필요한 모든 클라이언트 초기화 (Hugging Face 버전)
+        
+        Args:
+            use_hf_model (bool): Hugging Face 모델 사용 여부 (기본값: True)
+            hf_model_name (str): Hugging Face 모델 이름 (기본값: "Jinuuuu/KoELECTRA_fine_tunning_emotion")
+        """
+        print("=== NovelProcessor 초기화 (Hugging Face 모델 버전) ===")
+        
         self.gpt_client = GPTClient()
         self.db_manager = DatabaseManager()
-        self.emotion_analyzer = EmotionAnalyzer()
-        self.music_recommender = MusicRecommender(db_manager=self.db_manager)
+        
+        # Hugging Face 모델 사용
+        if use_hf_model:
+            print("Hugging Face KoELECTRA 모델을 사용합니다.")
+            model_name = hf_model_name or "Jinuuuu/KoELECTRA_fine_tunning_emotion"
+            self.emotion_analyzer = EmotionAnalyzer(
+                model_name=model_name,
+                use_local=False
+            )
+            self.music_recommender = MusicRecommender(
+                db_manager=self.db_manager,
+                use_hf_model=True,
+                model_name=model_name
+            )
+        else:
+            print("로컬 KoELECTRA 모델을 사용합니다.")
+            self.emotion_analyzer = EmotionAnalyzer(use_local=True)
+            self.music_recommender = MusicRecommender(
+                db_manager=self.db_manager,
+                use_hf_model=False
+            )
+        
+        print("NovelProcessor 초기화 완료!")
 
     def generate_chapter(self, user_id: str, user_message: str, book_id: str) -> Dict:
         """
@@ -30,7 +59,7 @@ class NovelProcessor:
         ---
 
 
-        소설 챕터 생성 함수
+        소설 챕터 생성 함수 (Hugging Face 모델 버전)
         
         사용자의 입력을 받아 AI가 소설의 다음 내용을 생성합니다.
         이전 챕터들의 맥락과 현재 챕터의 채팅 히스토리를 모두 활용하여
@@ -55,6 +84,8 @@ class NovelProcessor:
             7. 결과 반환
         """
         try:
+            print(f"[HF 모델] 챕터 생성 시작 - 사용자: {user_id}, 책: {book_id}")
+            
             # 1. 사용자 존재 여부 확인
             user = self.db_manager.get_user_by_id(user_id)
             if not user:
@@ -124,6 +155,8 @@ class NovelProcessor:
             # 9. 현재 챕터 번호 확인
             chapter_num = current_chapter.get('chapter_info', {}).get('chapter_Num', '')
             
+            print(f"[HF 모델] 챕터 {chapter_num} GPT 생성 요청")
+            
             # 10. GPT를 이용하여 소설 내용 생성 (개선된 chat_session 사용)
             content = self.gpt_client.chat_session(
                 chapter_num=chapter_num,
@@ -137,6 +170,8 @@ class NovelProcessor:
             updated_chat_history.append({"LLM_Model": content, "User": user_message})
             self.db_manager.update_chat_history(user_id, chapter_num, updated_chat_history)
             
+            print(f"[HF 모델] 챕터 생성 완료 - 길이: {len(content)}자")
+            
             return {
                 "status": "success",
                 "code": 200,
@@ -145,6 +180,7 @@ class NovelProcessor:
             }
             
         except Exception as e:
+            print(f"[HF 모델] 챕터 생성 오류: {str(e)}")
             return {
                 "status": "fail",
                 "code": 500,
@@ -163,7 +199,7 @@ class NovelProcessor:
             
         
 
-        챕터 완료 및 음악 추천 함수
+        챕터 완료 및 음악 추천 함수 (Hugging Face 모델 버전)
         
         현재 작업 중인 챕터(workingFlag=True)의 내용을 요약하고 DB에 저장한 후,
         Algorithm 1을 사용하여 적절한 음악을 추천합니다.
@@ -181,11 +217,13 @@ class NovelProcessor:
             1. book_id로 현재 작업 중인 챕터 조회
             2. GPT를 통한 챕터 내용 요약 생성
             3. 챕터에 요약 정보 저장
-            4. Algorithm 1을 이용한 음악 추천 (KoELECTRA + 코사인 유사도)
+            4. Algorithm 1을 이용한 음악 추천 (HF KoELECTRA + 코사인 유사도)
             5. 챕터에 음악 정보 저장 및 workingFlag를 False로 변경
             6. 요약 및 음악 정보 반환
         """
         try:
+            print(f"[HF 모델] 챕터 완료 및 음악 추천 시작 - 사용자: {user_id}, 책: {book_id}")
+            
             # 1. book_id로 현재 작업 중인 챕터 조회
             current_chapter = self.db_manager.get_current_chapter_contents(book_id=book_id)
             if not current_chapter:
@@ -250,12 +288,13 @@ class NovelProcessor:
                     "message": "텍스트 추천 실패 (CODE 500)"
                 }
             
-            # 5. Algorithm 1을 사용한 음악 추천
+            # 5. Algorithm 1을 사용한 음악 추천 (Hugging Face 모델)
             try:
                 # Algorithm 1: recommend_music에서 클래스 내부의 db_manager를 통해 음악 데이터베이스 조회 및 추천 처리
+                # 긴 텍스트 처리 기능 활용을 위해 전체 챕터 내용 사용 (요약 아님)
                 recommendations = self.music_recommender.recommend_music(
                     userID=user_id,
-                    novelContents=chapter_summary,  # 요약된 내용 사용
+                    novelContents=chapter_content_text,  # 전체 챕터 내용 사용 (긴 텍스트 처리 활용)
                     musicDB=None,  # None으로 설정하여 내부에서 db_manager를 통해 조회
                     N=1  # 챕터당 하나의 음악 추천
                 )
@@ -309,8 +348,8 @@ class NovelProcessor:
                 
                 # 대안: 기존 방식으로 폴백
                 try:
-                    # KoELECTRA 모델을 이용한 감정 분석 (폴백)
-                    emotions = self.emotion_analyzer.analyze_emotions(chapter_summary)
+                    # KoELECTRA 모델을 이용한 감정 분석 (폴백) - 전체 챕터 내용 사용
+                    emotions = self.emotion_analyzer.analyze_emotions(chapter_content_text)
                     dominant_emotion = emotions.get('dominant_emotion', 'happy')
                     
                     # 주요 감정에 기반한 음악 추천 (기존 방식)
@@ -365,7 +404,7 @@ class NovelProcessor:
                 "message": "텍스트 추천 실패 (CODE 500)"
             }
 
-# 전역 소설 처리 인스턴스 (지연 초기화)
+# 전역 소설 처리 인스턴스 (지연 초기화) - Hugging Face 버전
 novel_processor = None
 
 def get_novel_processor():
@@ -377,7 +416,7 @@ def get_novel_processor():
 
 def handle_story_continue(user_id: str, user_message: str, book_id: str) -> Dict:
     """
-    소설 계속 쓰기 요청 처리 함수
+    소설 계속 쓰기 요청 처리 함수 (Hugging Face 모델 버전)
     
     외부 서버에서 호출할 수 있는 함수입니다.
     /story/continue 엔드포인트의 요청을 처리합니다.
@@ -408,7 +447,7 @@ def handle_story_continue(user_id: str, user_message: str, book_id: str) -> Dict
 
 def handle_chapter_summary_with_music(user_id: str, book_id: str) -> Dict:
     """
-    챕터 요약 및 음악 추천 요청 처리 함수
+    챕터 요약 및 음악 추천 요청 처리 함수 (Hugging Face 모델 버전)
     
     외부 서버에서 호출할 수 있는 함수입니다.
     /story/chapter/summary_with_music 엔드포인트의 요청을 처리합니다.

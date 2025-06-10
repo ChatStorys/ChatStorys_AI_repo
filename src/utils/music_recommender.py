@@ -1,5 +1,5 @@
 """
-음악 추천 시스템
+음악 추천 시스템 (Hugging Face 모델 버전)
 
 Algorithm 1, 3, 4를 구현하여 감정 기반 음악 추천을 수행합니다.
 """
@@ -7,16 +7,26 @@ Algorithm 1, 3, 4를 구현하여 감정 기반 음악 추천을 수행합니다
 import numpy as np
 from typing import Dict, List
 from .emotion_analyzer import EmotionAnalyzer
+import re
 
 class MusicRecommender:
-    def __init__(self, db_manager=None):
+    def __init__(self, db_manager=None, use_hf_model=True, model_name=None):
         """
-        음악 추천 시스템 초기화
+        음악 추천 시스템 초기화 (Hugging Face 모델 버전)
         
         Args:
             db_manager: DatabaseManager 인스턴스 (선택사항)
+            use_hf_model (bool): Hugging Face 모델 사용 여부 (기본값: True)
+            model_name (str): Hugging Face 모델 이름 (기본값: "Jinuuuu/KoELECTRA_fine_tunning_emotion")
         """
-        self.emotion_analyzer = EmotionAnalyzer()
+        if use_hf_model:
+            self.emotion_analyzer = EmotionAnalyzer(
+                model_name=model_name or "Jinuuuu/KoELECTRA_fine_tunning_emotion",
+                use_local=False
+            )
+        else:
+            self.emotion_analyzer = EmotionAnalyzer(use_local=True)
+            
         self.db_manager = db_manager
         
         # Algorithm 4: get_music_features_for_emotion의 weight_table (실제 KoELECTRA 레이블 기준)
@@ -31,6 +41,152 @@ class MusicRecommender:
         
         # 특성 이름들
         self.feature_names = ['acoustic', 'electronic', 'aggressive', 'relaxed', 'happy', 'sad', 'party']
+
+    def _split_text_into_chunks(self, text: str, max_length: int = 300) -> List[str]:
+        """
+        긴 텍스트를 청크 단위로 분할
+        
+        Args:
+            text (str): 분할할 텍스트
+            max_length (int): 각 청크의 최대 문자 수 (토큰 수 고려하여 300자로 설정)
+            
+        Returns:
+            List[str]: 분할된 텍스트 청크들
+        """
+        # 빈 텍스트 처리
+        if not text or not text.strip():
+            return [""]
+        
+        text = text.strip()
+        
+        # 텍스트가 짧으면 그대로 반환
+        if len(text) <= max_length:
+            return [text]
+        
+        chunks = []
+        
+        # 문장 단위로 먼저 분리 시도
+        sentences = re.split(r'[.!?]+', text)
+        
+        current_chunk = ""
+        for sentence in sentences:
+            sentence = sentence.strip()
+            if not sentence:
+                continue
+                
+            # 현재 청크에 문장을 추가했을 때 길이 확인
+            if len(current_chunk + sentence) <= max_length:
+                current_chunk += sentence + ". "
+            else:
+                # 현재 청크가 비어있지 않으면 저장
+                if current_chunk.strip():
+                    chunks.append(current_chunk.strip())
+                
+                # 문장 자체가 너무 긴 경우 강제로 분할
+                if len(sentence) > max_length:
+                    # 단어 단위로 분할
+                    words = sentence.split()
+                    temp_chunk = ""
+                    for word in words:
+                        if len(temp_chunk + word) <= max_length:
+                            temp_chunk += word + " "
+                        else:
+                            if temp_chunk.strip():
+                                chunks.append(temp_chunk.strip())
+                            temp_chunk = word + " "
+                    if temp_chunk.strip():
+                        current_chunk = temp_chunk
+                else:
+                    current_chunk = sentence + ". "
+        
+        # 마지막 청크 추가
+        if current_chunk.strip():
+            chunks.append(current_chunk.strip())
+        
+        # 빈 청크가 없도록 확인
+        chunks = [chunk for chunk in chunks if chunk.strip()]
+        
+        return chunks if chunks else [text[:max_length]]
+
+    def _analyze_long_text_music_features(self, text: str) -> List[float]:
+        """
+        긴 텍스트를 청크 단위로 분석하여 평균 음악 특성 벡터 반환
+        
+        각 청크별로:
+        1. 감정 분석 수행
+        2. 주요 감정에 해당하는 음악 특성 벡터 생성
+        3. 모든 청크의 음악 특성 벡터를 평균내어 최종 특성 벡터 반환
+        
+        Args:
+            text (str): 분석할 긴 텍스트
+            
+        Returns:
+            List[float]: 평균 음악 특성 벡터 [acoustic, electronic, aggressive, relaxed, happy, sad, party]
+        """
+        try:
+            # 텍스트를 청크로 분할
+            chunks = self._split_text_into_chunks(text)
+            
+            if not chunks:
+                return self.get_music_features_for_emotion('happy')  # 기본값
+            
+            print(f"텍스트를 {len(chunks)}개 청크로 분할하여 음악 특성 분석 중...")
+            
+            # 각 청크별 음악 특성 벡터 수집
+            all_music_features = []
+            chunk_emotions = []
+            
+            for i, chunk in enumerate(chunks):
+                try:
+                    # 1. 청크별 감정 분석
+                    emotion_probs = self.emotion_analyzer.analyze_emotion_with_KoELECTRA(chunk)
+                    if emotion_probs:
+                        # 2. 주요 감정 추출
+                        dominant_emotion = max(emotion_probs.items(), key=lambda x: x[1])[0]
+                        chunk_emotions.append(dominant_emotion)
+                        
+                        # 3. 해당 감정의 음악 특성 벡터 생성
+                        music_features = self.get_music_features_for_emotion(dominant_emotion)
+                        all_music_features.append(music_features)
+                        
+                        print(f"청크 {i+1}/{len(chunks)}: {dominant_emotion} (확률: {emotion_probs[dominant_emotion]:.3f}) -> 음악 특성 추출 완료")
+                    else:
+                        # 감정 분석 실패 시 기본값 사용
+                        default_features = self.get_music_features_for_emotion('happy')
+                        all_music_features.append(default_features)
+                        chunk_emotions.append('happy')
+                        print(f"청크 {i+1}/{len(chunks)}: 기본값(happy) 사용")
+                        
+                except Exception as e:
+                    print(f"청크 {i+1} 분석 오류: {str(e)} -> 기본값 사용")
+                    # 오류 시 기본값 사용
+                    default_features = self.get_music_features_for_emotion('happy')
+                    all_music_features.append(default_features)
+                    chunk_emotions.append('happy')
+                    continue
+            
+            if not all_music_features:
+                return self.get_music_features_for_emotion('happy')  # 기본값
+            
+            # 4. 모든 청크의 음악 특성 벡터를 평균내어 최종 특성 벡터 생성
+            num_features = len(self.feature_names)  # 7개 특성
+            averaged_features = []
+            
+            for feature_idx in range(num_features):
+                feature_values = [features[feature_idx] for features in all_music_features]
+                averaged_value = sum(feature_values) / len(feature_values)
+                averaged_features.append(averaged_value)
+            
+            print(f"전체 {len(all_music_features)}개 청크의 음악 특성 평균:")
+            print(f"청크별 주요 감정: {chunk_emotions}")
+            for i, (feature_name, value) in enumerate(zip(self.feature_names, averaged_features)):
+                print(f"  {feature_name}: {value:.3f}")
+            
+            return averaged_features
+            
+        except Exception as e:
+            print(f"긴 텍스트 음악 특성 분석 오류: {str(e)}")
+            return self.get_music_features_for_emotion('happy')  # 기본값
 
     def get_music_features_for_emotion(self, emotion: str) -> List[float]:
         """
@@ -107,23 +263,25 @@ class MusicRecommender:
             List[Dict]: 추천된 음악 리스트
         """
         try:
-            # 1. // 1. Perform emotion analysis
-            # 2. emotion_probs ← analyze_emotion_with_KoELECTRA(novelContents)
-            emotion_probs = self.emotion_analyzer.analyze_emotion_with_KoELECTRA(novelContents)
+            # 1. 텍스트 길이에 따른 음악 특성 벡터 추출
             
-            # 3. // 2. Select the top emotion
-            # 4. top_emotion ← arg max_e emotion_probs[e]
-            if not emotion_probs:
-                top_emotion = 'happy'  # 기본값
+            # 긴 텍스트 처리: 512 토큰(약 400자) 초과 시 청크 단위로 분석
+            if len(novelContents) > 300:  # 대략적인 토큰 수 계산 (1토큰 ≈ 1자)
+                print(f"긴 텍스트 감지: {len(novelContents)}자 -> 청크별 음악 특성 평균 분석 실행")
+                target_features = self._analyze_long_text_music_features(novelContents)
             else:
-                top_emotion = max(emotion_probs.items(), key=lambda x: x[1])[0]
+                # 짧은 텍스트: 기존 방식 (감정 분석 -> 음악 특성)
+                emotion_probs = self.emotion_analyzer.analyze_emotion_with_KoELECTRA(novelContents)
+                
+                if not emotion_probs:
+                    top_emotion = 'happy'  # 기본값
+                else:
+                    top_emotion = max(emotion_probs.items(), key=lambda x: x[1])[0]
+                    print(f"선택된 주요 감정: {top_emotion} (확률: {emotion_probs[top_emotion]:.3f})")
+                
+                target_features = self.get_music_features_for_emotion(top_emotion)
             
-            # 5. // 3. Lookup music feature vector for that emotion
-            # 6. target_features ← get_music_features_for_emotion(top_emotion)
-            target_features = self.get_music_features_for_emotion(top_emotion)
-            
-            # 7. // 4. Load song feature vectors from the music database
-            # 8. musicDB ← load_music_database_features() {Each entry: (songName, artist, feature_vector)}
+            # 2. musicDB ← load_music_database_features() {Each entry: (songName, artist, feature_vector)}
             if musicDB is None:
                 # 클래스의 db_manager를 우선 사용, 없으면 매개변수의 db_manager 사용
                 manager = self.db_manager or db_manager
@@ -131,51 +289,44 @@ class MusicRecommender:
                     raise ValueError("Either musicDB or db_manager must be provided")
                 musicDB = manager.get_music_database_for_recommendation()
             
-            # 9. // 5. Compute cosine similarity
-            # 10. similarity_list ← ∅
+            # 3. similarity_list ← ∅
             similarity_list = []
             
-            # 11. for all entry in musicDB do
+            # 4. for all entry in musicDB do
             for entry in musicDB:
-                # 12. songName ← entry.songName
+                # 5. songName ← entry.songName
                 songName = entry.get('songName', entry.get('musicTitle', 'Unknown'))
                 
-                # 13. artist ← entry.artist
+                # 6. artist ← entry.artist
                 artist = entry.get('artist', entry.get('composer', 'Unknown'))
                 
-                # 14. song_feats ← entry.feature_vector
+                # 7. song_feats ← entry.feature_vector
                 song_feats = entry.get('feature_vector', [])
                 
                 # feature_vector가 없는 경우 기본값 사용
                 if not song_feats or len(song_feats) != 7:
                     song_feats = [0.5] * 7  # 중간값으로 초기화
                 
-                # 15. sim ← cosine_similarity(target_features, song_feats)
+                # 8. sim ← cosine_similarity(target_features, song_feats)
                 sim = self.cosine_similarity(target_features, song_feats)
                 
-                # 16. similarity_list.append((songID, sim))
+                # 9. similarity_list.append((songID, sim))
                 similarity_list.append({
                     'songName': songName,
                     'artist': artist,
                     'similarity': sim,
-                    'emotion': top_emotion,
+                    'target_features': target_features,  # 디버깅을 위해 추가
                     'original_entry': entry
                 })
-            # 17. end for
+            # 10. end for
             
-            # 18. // 6. Sort by similarity and pick top N
-            # 19. sort(similarity_list) by similarity desc
+            # 11. sort(similarity_list) by similarity desc
             similarity_list.sort(key=lambda x: x['similarity'], reverse=True)
             
-            # 20. N ← 5
-            # 21. recommendedList ← similarity_list[1..N]
+            # 12. recommendedList ← similarity_list[1..N]
             recommendedList = similarity_list[:N]
             
-            # 22. // 7. Optionally save recommendation history
-            # 23. save_user_recommendation_history(userID, recommendedList)
-            # (선택사항으로 구현하지 않음)
-            
-            # 24. return recommendedList
+            # 13. return recommendedList
             return recommendedList
             
         except Exception as e:

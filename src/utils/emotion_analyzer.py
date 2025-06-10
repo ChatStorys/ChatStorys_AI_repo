@@ -8,26 +8,49 @@ from dotenv import load_dotenv
 load_dotenv()
 
 class EmotionAnalyzer:
-    def __init__(self, model_path: str = None):
+    def __init__(self, model_name: str = None, use_local: bool = False):
         """
-        감정 분석을 위한 KoELECTRA 모델 초기화
+        감정 분석을 위한 KoELECTRA 모델 초기화 (Hugging Face 버전)
         
         Args:
-            model_path (str): KoELECTRA 모델이 저장된 경로
+            model_name (str): Hugging Face 모델 이름
+            use_local (bool): 로컬 모델 사용 여부
         """
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         
-        # 환경변수에서 모델 경로 가져오기
-        self.model_path = model_path or os.getenv("KOELECTRA_MODEL_PATH", "outputs/koelectra_emotion")
+        if use_local:
+            # 로컬 모델 경로 사용
+            self.model_path = os.getenv("KOELECTRA_MODEL_PATH", "outputs/koelectra_emotion")
+        else:
+            # Hugging Face 모델 사용
+            self.model_path = model_name or "Jinuuuu/KoELECTRA_fine_tunning_emotion"
         
-        self.tokenizer = AutoTokenizer.from_pretrained(self.model_path)
-        self.model = AutoModelForSequenceClassification.from_pretrained(self.model_path)
-        self.model.to(self.device)
-        self.model.eval()
+        print(f"모델 로드 중: {self.model_path}")
+        print(f"사용 디바이스: {self.device}")
+        
+        try:
+            self.tokenizer = AutoTokenizer.from_pretrained(self.model_path)
+            self.model = AutoModelForSequenceClassification.from_pretrained(self.model_path)
+            self.model.to(self.device)
+            self.model.eval()
+            print("모델 로드 완료!")
+        except Exception as e:
+            print(f"모델 로드 오류: {str(e)}")
+            print("로컬 모델로 다시 시도합니다...")
+            # Hugging Face 모델 로드 실패 시 로컬 모델로 폴백
+            try:
+                local_path = "outputs/koelectra_emotion"
+                self.tokenizer = AutoTokenizer.from_pretrained(local_path)
+                self.model = AutoModelForSequenceClassification.from_pretrained(local_path)
+                self.model.to(self.device)
+                self.model.eval()
+                print("로컬 모델 로드 완료!")
+            except Exception as local_error:
+                raise Exception(f"모델 로드 실패 - HF: {str(e)}, Local: {str(local_error)}")
         
         # 감정 레이블 정의 (실제 KoELECTRA 모델 출력 기준)
         self.emotion_labels = [
-            'angry', 'happy', 'anxious', 'embarrassed', 'sad', 'heartache'
+            'angry', 'anxious', 'embarrassed', 'happy', 'heartache', 'sad'
         ]
         
         # 한국어-영어 감정 매핑 (실제 모델 레이블 기준)
@@ -45,7 +68,7 @@ class EmotionAnalyzer:
 
     def analyze_emotion_with_KoELECTRA(self, text: str) -> Dict[str, float]:
         """
-        Algorithm 2: KoELECTRA를 이용한 감정 분석
+        Algorithm 2: KoELECTRA를 이용한 감정 분석 (Hugging Face 버전)
         
         Args:
             text (str): 분석할 텍스트
@@ -53,32 +76,42 @@ class EmotionAnalyzer:
         Returns:
             Dict[str, float]: 감정별 확률값 (probs)
         """
-        # 1. tokens ← tokenizer.encode(text)
-        tokens = self.tokenizer(
-            text,
-            return_tensors="pt",
-            truncation=True,
-            max_length=512,
-            padding=True
-        ).to(self.device)
-        
-        # 2. outputs ← KoELECTRA_model.predict(tokens)
-        with torch.no_grad():
-            outputs = self.model(**tokens)
+        if not text or not text.strip():
+            # 빈 텍스트 처리
+            return {emotion: 1.0/len(self.emotion_labels) for emotion in self.emotion_labels}
             
-        # 3. probs ← softmax(outputs.logits)
-        probs = torch.softmax(outputs.logits, dim=1)
-        
-        # 4. return probs
-        emotion_probs = {}
-        
-        # 실제 KoELECTRA 모델이 출력하는 순서대로 매핑
-        # 모델 출력 순서: angry, happy, anxious, embarrassed, sad, heartache
-        for i, emotion_label in enumerate(self.emotion_labels):
-            if i < len(probs[0]):
-                emotion_probs[emotion_label] = float(probs[0][i])
-        
-        return emotion_probs
+        try:
+            # 1. tokens ← tokenizer.encode(text)
+            tokens = self.tokenizer(
+                text,
+                return_tensors="pt",
+                truncation=True,
+                max_length=512,
+                padding=True
+            ).to(self.device)
+            
+            # 2. outputs ← KoELECTRA_model.predict(tokens)
+            with torch.no_grad():
+                outputs = self.model(**tokens)
+                
+            # 3. probs ← softmax(outputs.logits)
+            probs = torch.softmax(outputs.logits, dim=1)
+            
+            # 4. return probs
+            emotion_probs = {}
+            
+            # 실제 KoELECTRA 모델이 출력하는 순서대로 매핑
+            # 모델 출력 순서: angry, anxious, embarrassed, happy, heartache, sad
+            for i, emotion_label in enumerate(self.emotion_labels):
+                if i < len(probs[0]):
+                    emotion_probs[emotion_label] = float(probs[0][i])
+            
+            return emotion_probs
+            
+        except Exception as e:
+            print(f"감정 분석 중 오류 발생: {str(e)}")
+            # 오류 시 균등 분포 반환
+            return {emotion: 1.0/len(self.emotion_labels) for emotion in self.emotion_labels}
 
     def analyze_emotions(self, text: str) -> Dict:
         """
@@ -166,31 +199,3 @@ class EmotionAnalyzer:
             reverse=True
         )
         return sorted_emotions[:top_k]
-
-# 사용 예시
-if __name__ == "__main__":
-    # 감정 분석기 초기화
-    analyzer = EmotionAnalyzer()
-    
-    # 테스트 텍스트
-    test_text = "오늘은 정말 행복한 날이었다. 친구들과 즐거운 시간을 보냈고, 좋은 소식도 들었다."
-    
-    # Algorithm 2 테스트
-    emotions = analyzer.analyze_emotion_with_KoELECTRA(test_text)
-    print("\nKoELECTRA 감정 분석 결과:")
-    for emotion, score in emotions.items():
-        print(f"{emotion}: {score:.3f}")
-    
-    # 음악 추천용 분석
-    result = analyzer.analyze_emotions(test_text)
-    print(f"\n주요 감정: {result['dominant_emotion']} (신뢰도: {result['confidence']:.3f})")
-    
-    # 주요 감정
-    dominant = analyzer.get_dominant_emotion(test_text)
-    print(f"\n주요 감정: {dominant}")
-    
-    # 상위 3개 감정
-    top_emotions = analyzer.get_emotion_distribution(test_text, top_k=3)
-    print("\n상위 3개 감정:")
-    for emotion, score in top_emotions:
-        print(f"{emotion}: {score:.3f}") 
