@@ -1,6 +1,6 @@
 venv/
 outputs/
-env.example
+.env
 data/
 data/music_data.csv
 data/music_data_with_mbid.csv

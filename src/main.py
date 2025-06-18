@@ -4,8 +4,8 @@ from dotenv import load_dotenv
 # 프로젝트 내부 모듈 임포트 (Hugging Face 버전)
 from .api.gpt_client import GPTClient
 from .database.db_manager import DatabaseManager
-from .utils.emotion_analyzer_hf import EmotionAnalyzer  # HF 버전으로 변경
-from .utils.music_recommender_hf import MusicRecommender  # HF 버전으로 변경
+from .utils.emotion_analyzer import EmotionAnalyzer
+from .utils.music_recommender import MusicRecommender
 
 # 환경변수 로드
 load_dotenv()

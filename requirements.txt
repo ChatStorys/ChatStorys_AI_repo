@@ -23,4 +23,10 @@ datasets==2.16.1
 tqdm==4.66.1
 
 # HTTP Requests (for music fetcher)
-requests==2.31.0 
+requests==2.31.0
+
+# Server Dependencies
+fastapi==0.110.0
+uvicorn==0.27.1
+httpx==0.26.0
+python-multipart==0.0.9 

@@ -2,7 +2,17 @@ from typing import Dict, List
 from openai import OpenAI
 import os
 from dotenv import load_dotenv
-from ..utils.prompt_templates import PromptTemplates
+# from ..utils.prompt_templates import PromptTemplates
+
+import sys
+from pathlib import Path
+
+# Add src directory to Python path for imports
+src_path = str(Path(__file__).parent.parent)
+if src_path not in sys.path:
+    sys.path.append(src_path)
+
+from utils.prompt_templates import PromptTemplates
 
 load_dotenv()
 
