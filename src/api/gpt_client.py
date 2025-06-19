@@ -2,16 +2,15 @@ from typing import Dict, List
 from openai import OpenAI
 import os
 from dotenv import load_dotenv
-# from ..utils.prompt_templates import PromptTemplates
-
-import sys
 from pathlib import Path
 
-# Add src directory to Python path for imports
-src_path = str(Path(__file__).parent.parent)
-if src_path not in sys.path:
-    sys.path.append(src_path)
+# Get the absolute path to the src directory
+SRC_DIR = Path(__file__).parent.parent
+UTILS_DIR = SRC_DIR / "utils"
 
+# Import using file path
+import sys
+sys.path.append(str(SRC_DIR))
 from utils.prompt_templates import PromptTemplates
 
 load_dotenv()
@@ -198,3 +197,60 @@ class GPTClient:
             
         except Exception as e:
             raise Exception(f"Error summarizing chapter: {str(e)}")
+
+# if __name__ == "__main__":
+#     try:
+#         print("\n=== GPT Client Test ===")
+        
+#         # Initialize GPT client with GPT-3.5-turbo model
+#         gpt_client = GPTClient(model="gpt-4o")
+#         print("✅ GPT Client initialized successfully")
+        
+#         # Test context for novel generation
+#         test_context = {
+#             "title": "마법사의 여행",
+#             "genre": "판타지",
+#             "main_character": "젊은 마법사 아린",
+#             "setting": "중세 판타지 세계",
+#             "previous_chapters": [
+#                 "아린은 마법 학교를 졸업하고 처음으로 모험을 떠나기로 했다.",
+#                 "그녀는 전설의 마법 유물을 찾아 떠나는 여정을 시작했다."
+#             ]
+#         }
+        
+#         print("\n1. Testing Novel Generation")
+#         print("-" * 50)
+#         # Test chapter generation
+#         test_messages = [
+#             {
+#                 "User": "아린이 첫 번째 마을에 도착해서 겪는 이야기를 써줘.",
+#                 "LLM_Model": "아린은 해질녘에 작은 마을 '블루밍데일'에 도착했다..."
+#             }
+#         ]
+        
+#         test_user_message = "아린이 마을에서 신비한 상점을 발견하고..."
+#         chapter_content = gpt_client.chat_session(
+#             chapter_num="3",
+#             context=test_context,
+#             user_message=test_user_message,
+#             messages=test_messages
+#         )
+#         print("\nGenerated Chapter Content:")
+#         print("-" * 50)
+#         print(chapter_content)
+#         print("-" * 50)
+        
+#         print("\n2. Testing Chapter Summary")
+#         print("-" * 50)
+#         # Test summary generation
+#         summary = gpt_client.summarize_chapter(chapter_content, "3")
+#         print("\nChapter Summary:")
+#         print("-" * 50)
+#         print(summary)
+#         print("-" * 50)
+        
+#         print("\n✅ All tests completed successfully!")
+        
+#     except Exception as e:
+#         print(f"\n❌ Test failed: {str(e)}")
+#         raise e

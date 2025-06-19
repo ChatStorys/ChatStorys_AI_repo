@@ -46,20 +46,6 @@ class ChapterResponse(BaseModel):
     recommended_music: Optional[List[MusicRecommendation]] = None
     message: Optional[str] = None
 
-async def notify_external_server(endpoint: str, data: Dict) -> Dict:
-    """외부 서버에 알림을 보내는 비동기 함수"""
-    async with httpx.AsyncClient() as client:
-        try:
-            response = await client.post(
-                f"{EXTERNAL_SERVER_URL}{endpoint}",
-                json=data,
-                timeout=30.0
-            )
-            return response.json()
-        except Exception as e:
-            print(f"External server notification failed: {str(e)}")
-            return {"status": "error", "message": "External server communication failed"}
-
 @app.post("/story/continue")
 async def continue_story(request: StoryRequest):
     """소설 계속 쓰기 엔드포인트"""
@@ -90,11 +76,6 @@ async def generate_chapter_summary(request: ChapterRequest):
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/health")
-async def health_check():
-    """서버 상태 확인 엔드포인트"""
-    return {"status": "healthy", "service": "ChatStorys AI Server"}
 
 if __name__ == "__main__":
     import uvicorn
