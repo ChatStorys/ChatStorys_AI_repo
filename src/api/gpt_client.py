@@ -37,8 +37,8 @@ class GPTClient:
         self.temperature = float(os.getenv("TEMPERATURE", "0.7"))
         
         # Chat history management settings
-        self.max_history_tokens = int(os.getenv("MAX_HISTORY_TOKENS", "8000"))  # 히스토리 토큰 한도
-        self.max_context_length = int(os.getenv("MAX_CONTEXT_LENGTH", "16000"))  # 전체 컨텍스트 한도
+        self.max_history_tokens = int(os.getenv("MAX_HISTORY_TOKENS", "3000"))  # 히스토리 토큰 한도
+        self.max_context_length = int(os.getenv("MAX_CONTEXT_LENGTH", "6000"))  # 전체 컨텍스트 한도
 
     def _estimate_tokens(self, text: str) -> int:
         """
