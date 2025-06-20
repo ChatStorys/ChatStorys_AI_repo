@@ -51,14 +51,6 @@ class NovelProcessor:
 
     def generate_chapter(self, user_id: str, user_message: str, book_id: str) -> Dict:
         """
-
-        ---
-        2025-06-05 22:21 수정 필요
-        - 채팅 생성시 토큰 개수 유의하며, 가능한 토큰 개수를 알려주는 것이 좋을듯. 
-        - 다음번에 수정할때는 이를 중점으로!
-        ---
-
-
         소설 챕터 생성 함수 (Hugging Face 모델 버전)
         
         사용자의 입력을 받아 AI가 소설의 다음 내용을 생성합니다.
@@ -190,15 +182,6 @@ class NovelProcessor:
 
     def finish_chapter_and_recommend_music(self, user_id: str, book_id: str) -> Dict:
         """
-
-        ---
-        2025-06-05 22:21 수정 필요
-        - 음악 추천 알고리즘 수정 필요
-            음악 추천시 감정을 분석하는 문장을 몇 문장 단위로 끊어서 처리해야함 토큰 개수 유의!
-        ---
-            
-        
-
         챕터 완료 및 음악 추천 함수 (Hugging Face 모델 버전)
         
         현재 작업 중인 챕터(workingFlag=True)의 내용을 요약하고 DB에 저장한 후,

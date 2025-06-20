@@ -1,7 +1,3 @@
-'''
-We can use external DB
-'''
-
 from typing import Optional, List, Dict
 from pymongo import MongoClient
 from datetime import datetime
@@ -36,9 +32,9 @@ class DatabaseManager:
         
         # 컬렉션 초기화
         self.users = self.db.users
-        self.books = self.db.books
-        self.chapters = self.db.chapters
-        self.chat_storage = self.db.chat_storage
+        self.books = self.db.Book
+        self.chapters = self.db.Chapter
+        self.chat_storage = self.db.ChatStorage
         self.music = self.db.music
 
     def get_current_chapter_contents(self, book_id: str) -> Dict:

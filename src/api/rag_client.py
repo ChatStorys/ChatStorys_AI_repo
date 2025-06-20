@@ -1,55 +1,73 @@
 from typing import Dict, List
-import faiss
 import numpy as np
-from langchain.embeddings import OpenAIEmbeddings
-from langchain.vectorstores import FAISS
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.document_loaders import TextLoader
+from langchain_community.embeddings import OpenAIEmbeddings
+from langchain_community.vectorstores import FAISS
+from langchain_community.document_loaders import TextLoader
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 import os
 import json
 from tqdm import tqdm
 from dotenv import load_dotenv
-from pathlib import Path
-
-# Get absolute paths
-PROJECT_ROOT = Path(__file__).parent.parent.parent
-DATA_DIR = PROJECT_ROOT / "data"
-VECTOR_STORE_DIR = PROJECT_ROOT / "vector_store"
 
 load_dotenv()
 
 class RAGClient:
-    def __init__(self, model_path: str = None, openai_api_key: str = None):
+    def __init__(self, model_path: str = None, openai_api_key: str = None, force_initialize: bool = False):
         # 환경변수에서 API 키와 모델 경로 가져오기
         api_key = openai_api_key or os.getenv("OPENAI_API_KEY")
         if not api_key:
             raise ValueError("OpenAI API key is required")
             
         self.embeddings = OpenAIEmbeddings(openai_api_key=api_key)
-        self.model_path = model_path or str(VECTOR_STORE_DIR)
-        self.vector_store = None
-        self._initialize_vector_store()
+        self.model_path = model_path or os.getenv("VECTOR_STORE_PATH", "./vector_store")
+        self.data_dir = os.getenv("DATA_DIR", "./data")
+        
+        if force_initialize:
+            self._initialize_vector_store()
+        else:
+            self.vector_store = self._load_existing_vector_store()
+            if self.vector_store is None:
+                print("Vector store not found, initializing new vector store")
+                self._initialize_vector_store()
+            
+    def _load_existing_vector_store(self):
+        """
+        Load an existing vector store from the model path
+        """
+        try:
+            if os.path.exists(self.model_path):
+                return FAISS.load_local(
+                    self.model_path, 
+                    self.embeddings,
+                    allow_dangerous_deserialization=True
+                )
+            else:
+                raise FileNotFoundError(f"Vector store not found at {self.model_path}")
+        except Exception as e:
+            raise Exception(f"Error loading existing vector store: {str(e)}")
 
     def _initialize_vector_store(self):
         """
         Initialize the vector store with genre-specific data
         """
         try:
-            if os.path.exists(self.model_path):
-                self.vector_store = FAISS.load_local(self.model_path, self.embeddings)
-            else:
-                # Create new vector store if it doesn't exist
-                self.vector_store = FAISS.from_texts([""], self.embeddings)
+            print("Initializing new vector store")
+            self.vector_store = FAISS.from_texts([""], self.embeddings)
+            os.makedirs(self.model_path, exist_ok=True)
+            self.vector_store.save_local(self.model_path)
+            print(f"Vector store saved to {self.model_path}")
         except Exception as e:
             raise Exception(f"Error initializing vector store: {str(e)}")
 
-    def load_crawled_data(self, data_dir: str):
+    def load_crawled_data(self, data_dir: str = None):
         """
         Load and process crawled JSON data files
         """
         all_texts = []
         
         # Load all crawl*.json files
+        data_dir = data_dir or self.data_dir
+        
         for filename in os.listdir(data_dir):
             if filename.startswith("crawl") and filename.endswith(".json"):
                 file_path = os.path.join(data_dir, filename)
@@ -61,10 +79,10 @@ class RAGClient:
                             if isinstance(item, dict):
                                 # Combine relevant fields into a single text
                                 text_parts = []
-                                if 'chunkNum' in item:
-                                    text_parts.append(f"chunkNum: {item['chunkNum']}")
+                                # if 'chunkNum' in item:
+                                #     text_parts.append(f"chunkNum: {item['chunkNum']}")
                                 if 'content' in item:
-                                    text_parts.append(f"content: {item['content']}\n")
+                                    text_parts.append(f"content: {item['content']}")
                                     
                                 combined_text = "\n".join(text_parts)
                                 if combined_text.strip():
@@ -84,7 +102,7 @@ class RAGClient:
             # Split texts into smaller chunks
             text_splitter = RecursiveCharacterTextSplitter(
                 chunk_size=chunk_size,
-                chunk_overlap=chunk_overlap
+                chunk_overlap=0 # overlap 없음 
             )
             
             print("Splitting texts into chunks...")
@@ -129,15 +147,6 @@ class RAGClient:
         except Exception as e:
             raise Exception(f"Error searching similar chapters: {str(e)}")
 
-    def format_search_results(self, results: List) -> str:
-        """
-        Format search results into a readable string
-        """
-        formatted_results = []
-        for i, result in enumerate(results, 1):
-            formatted_results.append(f"Result {i}:\n{result}\n")
-        return "\n".join(formatted_results)
-
     def update_vector_store(self, new_texts: List[str]):
         """
         Update the vector store with new texts
@@ -145,7 +154,7 @@ class RAGClient:
         try:
             text_splitter = RecursiveCharacterTextSplitter(
                 chunk_size=1000,
-                chunk_overlap=200
+                chunk_overlap=0
             )
             texts = text_splitter.split_text("\n".join(new_texts))
             self.vector_store.add_texts(texts)
@@ -161,24 +170,25 @@ if __name__ == "__main__":
         rag_client = RAGClient()
         print("✅ RAG Client initialized successfully")
         
-        # Load crawled data
-        print("\n1. Loading crawled data...")
-        texts = rag_client.load_crawled_data(str(DATA_DIR))
-        print(f"✅ Loaded {len(texts)} documents from crawled data")
-        
-        # Create vector store
-        print("\n2. Creating vector store...")
-        rag_client.create_vector_store(texts)
-        print("✅ Vector store created successfully")
-        
+        if rag_client.vector_store is None:
+            # Load crawled data
+            print("\n1. Loading crawled data...")
+            texts = rag_client.load_crawled_data()
+            print(f"✅ Loaded {len(texts)} documents from crawled data")
+            
+            # Create vector store
+            print("\n2. Creating vector store...")
+            rag_client.create_vector_store(texts)
+            print("✅ Vector store created successfully")
+            
         # Test similarity search
         print("\n3. Testing similarity search...")
-        test_query = "판타지 소설에서 마법사가 등장하는 장면"
-        results = rag_client.search_similar_chapters(test_query)
+        test_query = "real"
+        results = rag_client.search_genre_requirements(test_query)
         
         print("\nSearch Results:")
         print("-" * 50)
-        print(rag_client.format_search_results(results))
+        print(results['requirements'])
         print("-" * 50)
         
         print("\n✅ All tests completed successfully!")

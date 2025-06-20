@@ -96,8 +96,7 @@ class PromptTemplates:
 **출력 형식:**
 - GPT생성 문장만을 출력합니다.
 - GPT는 입력되는 사용자 메시지에 따른 출력만을 출력합니다.
-- 출력 문장은 줄바꿈 없이 출력합니다.
-- 최대 500자 이내로 출력합니다."""
+- 최대 1000자 이내로 출력합니다."""
 
     @staticmethod
     def get_summary_prompt(chapter_content: str) -> str:

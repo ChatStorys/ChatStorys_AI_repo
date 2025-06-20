@@ -30,3 +30,9 @@ fastapi==0.110.0
 uvicorn==0.27.1
 httpx==0.26.0
 python-multipart==0.0.9 
+
+# RAG (Retrieval Augmented Generation)
+langchain-community>=0.0.10
+langchain-text-splitters>=0.0.1
+faiss-cpu>=1.7.4
+tiktoken>=0.6.0
