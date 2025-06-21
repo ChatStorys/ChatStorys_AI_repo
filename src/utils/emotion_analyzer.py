@@ -25,13 +25,14 @@ class EmotionAnalyzer:
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         
         if use_hf_api:
-            # API URL 지정 또는 모델명으로 생성
+            # API URL 지정 또는 환경 변수 사용
             if hf_api_url:
                 self.hf_api_url = hf_api_url
             else:
-                # model_name이 없으면 기본값 사용
-                model_id = model_name or "Jinuuuu/KoELECTRA_fine_tunning_emotion"
-                self.hf_api_url = f"https://api-inference.huggingface.co/models/{model_id}"
+                self.hf_api_url = os.getenv(
+                    "HF_EMOTION_API_URL",
+                    "https://hglww4g5jugd2khs.us-east-1.aws.endpoints.huggingface.cloud",
+                )
             print(f"Hugging Face Inference API 사용: {self.hf_api_url}")
         else:
             if use_local:
