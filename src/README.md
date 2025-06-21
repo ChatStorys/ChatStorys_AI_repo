@@ -90,6 +90,7 @@ MONGODB_DATABASE=novel_db
 
 # KoELECTRA Model
 KOELECTRA_MODEL_PATH=outputs/koelectra_emotion
+HF_EMOTION_API_URL=https://hglww4g5jugd2khs.us-east-1.aws.endpoints.huggingface.cloud
 ```
 
 ### 5. MongoDB 설정

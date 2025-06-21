@@ -96,6 +96,7 @@ python test_hf_emotion_model.py
 ```bash
 # .env 파일에 설정
 KOELECTRA_MODEL_PATH=outputs/koelectra_emotion  # 로컬 모델 경로 (폴백용)
+HF_EMOTION_API_URL=https://hglww4g5jugd2khs.us-east-1.aws.endpoints.huggingface.cloud  # KoELECTRA Inference API
 ```
 
 ## API 참조
