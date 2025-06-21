@@ -21,7 +21,7 @@ class EmotionAnalyzer:
             hf_api_url (str): Hugging Face Inference API URL (명시적으로 지정 가능)
         """
         self.use_hf_api = use_hf_api
-        self.hf_api_token = hf_api_token
+        self.hf_api_token = os.getenv("HF_API_TOKEN")
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         
         if use_hf_api:
@@ -251,3 +251,23 @@ class EmotionAnalyzer:
             reverse=True
         )
         return sorted_emotions[:top_k]
+
+if __name__ == "__main__":
+    # 테스트용 예시 문장
+    test_texts = [
+        "오늘은 정말 행복한 하루야!",
+        "나는 너무 불안하고 걱정돼.",
+        "이별은 항상 마음이 아파.",
+        "시험 망쳐서 화가 난다.",
+        "친구들 앞에서 실수해서 너무 창피했어.",
+        "요즘 너무 우울해.",
+        "기대되는 일이 있어!"
+    ]
+
+    # Hugging Face Inference API 사용 (기본값 True)
+    analyzer = EmotionAnalyzer(model_name="Jinuuuu/KoELECTRA_fine_tunning_emotion")
+
+    for text in test_texts:
+        result = analyzer.analyze_emotions(text)
+        print(f"문장: {text}")
+        print(f"분석 결과: {result}\n")
