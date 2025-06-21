@@ -4,49 +4,64 @@ import numpy as np
 from typing import Dict, List, Union
 import os
 from dotenv import load_dotenv
+import requests
 
 load_dotenv()
 
 class EmotionAnalyzer:
-    def __init__(self, model_name: str = None, use_local: bool = False):
+    def __init__(self, model_name: str = None, use_local: bool = False, use_hf_api: bool = True, hf_api_token: str = None, hf_api_url: str = None):
         """
-        감정 분석을 위한 KoELECTRA 모델 초기화 (Hugging Face 버전)
+        감정 분석을 위한 KoELECTRA 모델 초기화 (Hugging Face 버전 및 Hosted Inference API 지원)
         
         Args:
             model_name (str): Hugging Face 모델 이름
             use_local (bool): 로컬 모델 사용 여부
+            use_hf_api (bool): Hugging Face Hosted Inference API 사용 여부
+            hf_api_token (str): Hugging Face API 토큰 (Private 모델일 때 필요)
+            hf_api_url (str): Hugging Face Inference API URL (명시적으로 지정 가능)
         """
+        self.use_hf_api = use_hf_api
+        self.hf_api_token = hf_api_token
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         
-        if use_local:
-            # 로컬 모델 경로 사용
-            self.model_path = os.getenv("KOELECTRA_MODEL_PATH", "outputs/koelectra_emotion")
+        if use_hf_api:
+            # API URL 지정 또는 모델명으로 생성
+            if hf_api_url:
+                self.hf_api_url = hf_api_url
+            else:
+                # model_name이 없으면 기본값 사용
+                model_id = model_name or "Jinuuuu/KoELECTRA_fine_tunning_emotion"
+                self.hf_api_url = f"https://api-inference.huggingface.co/models/{model_id}"
+            print(f"Hugging Face Inference API 사용: {self.hf_api_url}")
         else:
-            # Hugging Face 모델 사용
-            self.model_path = model_name or "Jinuuuu/KoELECTRA_fine_tunning_emotion"
-        
-        print(f"모델 로드 중: {self.model_path}")
-        print(f"사용 디바이스: {self.device}")
-        
-        try:
-            self.tokenizer = AutoTokenizer.from_pretrained(self.model_path)
-            self.model = AutoModelForSequenceClassification.from_pretrained(self.model_path)
-            self.model.to(self.device)
-            self.model.eval()
-            print("모델 로드 완료!")
-        except Exception as e:
-            print(f"모델 로드 오류: {str(e)}")
-            print("로컬 모델로 다시 시도합니다...")
-            # Hugging Face 모델 로드 실패 시 로컬 모델로 폴백
+            if use_local:
+                # 로컬 모델 경로 사용
+                self.model_path = os.getenv("KOELECTRA_MODEL_PATH", "outputs/koelectra_emotion")
+            else:
+                # Hugging Face 모델 사용
+                self.model_path = model_name or "Jinuuuu/KoELECTRA_fine_tunning_emotion"
+            print(f"모델 로드 중: {self.model_path}")
+            print(f"사용 디바이스: {self.device}")
+            
             try:
-                local_path = "outputs/koelectra_emotion"
-                self.tokenizer = AutoTokenizer.from_pretrained(local_path)
-                self.model = AutoModelForSequenceClassification.from_pretrained(local_path)
+                self.tokenizer = AutoTokenizer.from_pretrained(self.model_path)
+                self.model = AutoModelForSequenceClassification.from_pretrained(self.model_path)
                 self.model.to(self.device)
                 self.model.eval()
-                print("로컬 모델 로드 완료!")
-            except Exception as local_error:
-                raise Exception(f"모델 로드 실패 - HF: {str(e)}, Local: {str(local_error)}")
+                print("모델 로드 완료!")
+            except Exception as e:
+                print(f"모델 로드 오류: {str(e)}")
+                print("로컬 모델로 다시 시도합니다...")
+                # Hugging Face 모델 로드 실패 시 로컬 모델로 폴백
+                try:
+                    local_path = "outputs/koelectra_emotion"
+                    self.tokenizer = AutoTokenizer.from_pretrained(local_path)
+                    self.model = AutoModelForSequenceClassification.from_pretrained(local_path)
+                    self.model.to(self.device)
+                    self.model.eval()
+                    print("로컬 모델 로드 완료!")
+                except Exception as local_error:
+                    raise Exception(f"모델 로드 실패 - HF: {str(e)}, Local: {str(local_error)}")
         
         # 감정 레이블 정의 (실제 KoELECTRA 모델 출력 기준)
         self.emotion_labels = [
@@ -68,7 +83,7 @@ class EmotionAnalyzer:
 
     def analyze_emotion_with_KoELECTRA(self, text: str) -> Dict[str, float]:
         """
-        Algorithm 2: KoELECTRA를 이용한 감정 분석 (Hugging Face 버전)
+        Algorithm 2: KoELECTRA를 이용한 감정 분석 (Hugging Face 버전 및 Hosted Inference API 지원)
         
         Args:
             text (str): 분석할 텍스트
@@ -79,39 +94,75 @@ class EmotionAnalyzer:
         if not text or not text.strip():
             # 빈 텍스트 처리
             return {emotion: 1.0/len(self.emotion_labels) for emotion in self.emotion_labels}
-            
-        try:
-            # 1. tokens ← tokenizer.encode(text)
-            tokens = self.tokenizer(
-                text,
-                return_tensors="pt",
-                truncation=True,
-                max_length=512,
-                padding=True
-            ).to(self.device)
-            
-            # 2. outputs ← KoELECTRA_model.predict(tokens)
-            with torch.no_grad():
-                outputs = self.model(**tokens)
+        
+        if self.use_hf_api:
+            # Hugging Face Hosted Inference API 사용
+            headers = {"Content-Type": "application/json"}
+            if self.hf_api_token:
+                headers["Authorization"] = f"Bearer {self.hf_api_token}"
+            data = {"inputs": text}
+            try:
+                response = requests.post(self.hf_api_url, headers=headers, json=data)
+                response.raise_for_status()
+                result = response.json()
+                # API 응답 파싱 (예상: [{"label": "angry", "score": 0.1}, ...] 또는 logits)
+                emotion_probs = {emotion: 1.0/len(self.emotion_labels) for emotion in self.emotion_labels}  # 기본값
+                if isinstance(result, list) and all("label" in r and "score" in r for r in result):
+                    # 예: [{"label": "angry", "score": 0.1}, ...]
+                    emotion_probs = {r["label"]: float(r["score"]) for r in result if r["label"] in self.emotion_labels}
+                    # 누락된 감정은 0으로 채움
+                    for label in self.emotion_labels:
+                        if label not in emotion_probs:
+                            emotion_probs[label] = 0.0
+                elif isinstance(result, dict) and "error" in result:
+                    print(f"HF API 오류: {result['error']}")
+                elif isinstance(result, list) and len(result) > 0 and "score" in result[0]:
+                    # 일부 모델은 [{"label":..., "score":...}] 형태
+                    emotion_probs = {r["label"]: float(r["score"]) for r in result if r["label"] in self.emotion_labels}
+                elif isinstance(result, dict) and "logits" in result:
+                    # 일부 모델은 {"logits": [...]} 형태
+                    logits = np.array(result["logits"])
+                    probs = np.exp(logits) / np.sum(np.exp(logits))
+                    emotion_probs = {label: float(prob) for label, prob in zip(self.emotion_labels, probs)}
+                else:
+                    print(f"HF API 응답 예외: {result}")
+                return emotion_probs
+            except Exception as e:
+                print(f"HF API 호출 오류: {str(e)}")
+                return {emotion: 1.0/len(self.emotion_labels) for emotion in self.emotion_labels}
+        else:
+            try:
+                # 1. tokens ← tokenizer.encode(text)
+                tokens = self.tokenizer(
+                    text,
+                    return_tensors="pt",
+                    truncation=True,
+                    max_length=512,
+                    padding=True
+                ).to(self.device)
                 
-            # 3. probs ← softmax(outputs.logits)
-            probs = torch.softmax(outputs.logits, dim=1)
-            
-            # 4. return probs
-            emotion_probs = {}
-            
-            # 실제 KoELECTRA 모델이 출력하는 순서대로 매핑
-            # 모델 출력 순서: angry, anxious, embarrassed, happy, heartache, sad
-            for i, emotion_label in enumerate(self.emotion_labels):
-                if i < len(probs[0]):
-                    emotion_probs[emotion_label] = float(probs[0][i])
-            
-            return emotion_probs
-            
-        except Exception as e:
-            print(f"감정 분석 중 오류 발생: {str(e)}")
-            # 오류 시 균등 분포 반환
-            return {emotion: 1.0/len(self.emotion_labels) for emotion in self.emotion_labels}
+                # 2. outputs ← KoELECTRA_model.predict(tokens)
+                with torch.no_grad():
+                    outputs = self.model(**tokens)
+                
+                # 3. probs ← softmax(outputs.logits)
+                probs = torch.softmax(outputs.logits, dim=1)
+                
+                # 4. return probs
+                emotion_probs = {}
+                
+                # 실제 KoELECTRA 모델이 출력하는 순서대로 매핑
+                # 모델 출력 순서: angry, anxious, embarrassed, happy, heartache, sad
+                for i, emotion_label in enumerate(self.emotion_labels):
+                    if i < len(probs[0]):
+                        emotion_probs[emotion_label] = float(probs[0][i])
+                
+                return emotion_probs
+                
+            except Exception as e:
+                print(f"감정 분석 중 오류 발생: {str(e)}")
+                # 오류 시 균등 분포 반환
+                return {emotion: 1.0/len(self.emotion_labels) for emotion in self.emotion_labels}
 
     def analyze_emotions(self, text: str) -> Dict:
         """
