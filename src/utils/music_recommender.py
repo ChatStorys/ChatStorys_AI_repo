@@ -6,8 +6,17 @@ Algorithm 1, 3, 4를 구현하여 감정 기반 음악 추천을 수행합니다
 
 import numpy as np
 from typing import Dict, List
-from .emotion_analyzer import EmotionAnalyzer
 import re
+
+# --- 아래 코드 추가 ---
+import sys
+import os
+if __name__ == "__main__":
+    sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+    from emotion_analyzer import EmotionAnalyzer
+else:
+    from .emotion_analyzer import EmotionAnalyzer
+# --- 위 코드 추가 ---
 
 class MusicRecommender:
     def __init__(self, db_manager=None, use_hf_model=True, model_name=None):
@@ -255,7 +264,7 @@ class MusicRecommender:
             userID (str): 사용자 ID
             novelContents (str): 소설 내용
             musicDB (List[Dict], optional): 음악 데이터베이스 (각 항목은 songName, artist, feature_vector 포함)
-                                           None이면 db_manager에서 자동으로 가져옴
+            None이면 db_manager에서 자동으로 가져옴
             N (int): 추천할 음악 개수 (기본값: 5)
             db_manager: DatabaseManager 인스턴스 (musicDB가 None일 때 필요)
             
@@ -332,3 +341,33 @@ class MusicRecommender:
         except Exception as e:
             print(f"음악 추천 오류: {str(e)}")
             return []
+
+if __name__ == "__main__":
+    # 테스트용 예시 문장
+    test_texts = [
+        "오늘은 정말 행복한 하루야!",
+        "나는 너무 불안하고 걱정돼.",
+        "이별은 항상 마음이 아파.",
+        "시험 망쳐서 화가 난다.",
+        "친구들 앞에서 실수해서 너무 창피했어.",
+        "요즘 너무 우울해.",
+        "기대되는 일이 있어!"
+    ]
+
+    print("=== EmotionAnalyzer 로컬 테스트 ===")
+    emotion_analyzer = EmotionAnalyzer(use_local=False)
+    for text in test_texts:
+        result = emotion_analyzer.analyze_emotions(text)
+        print(f"문장: {text}")
+        print(f"분석 결과: {result}\n")
+
+    print("=== MusicRecommender 로컬 테스트 ===")
+    music_recommender = MusicRecommender(db_manager=None, use_hf_model=False)
+    for text in test_texts:
+        print(f"문장: {text}")
+        # 감정 분석 및 음악 특성 벡터 추출
+        emotion_probs = music_recommender.emotion_analyzer.analyze_emotion_with_KoELECTRA(text)
+        top_emotion = max(emotion_probs.items(), key=lambda x: x[1])[0]
+        features = music_recommender.get_music_features_for_emotion(top_emotion)
+        print(f"  주요 감정: {top_emotion}")
+        print(f"  음악 특성 벡터: {features}\n")

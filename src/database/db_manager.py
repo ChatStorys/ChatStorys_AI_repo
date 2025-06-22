@@ -37,7 +37,7 @@ class DatabaseManager:
         self.chat_storage = self.db.ChatStorage
         self.music = self.db.music
 
-    def get_current_chapter_contents(self, book_id: str) -> Dict:
+    def get_current_chapter_contents(self, user_id: str, book_id: str) -> Dict:
         """
         Get the current working chapter contents (workingFlag = True)
         Returns:
@@ -59,6 +59,7 @@ class DatabaseManager:
         try:
             # Get current working chapter
             chapter = self.chapters.find_one({
+                "userId": user_id,
                 "bookId": book_id,
                 "workingFlag": True
             })
@@ -82,7 +83,7 @@ class DatabaseManager:
         except Exception as e:
             raise Exception(f"Error getting current chapter contents: {str(e)}")
 
-    def get_completed_chapters_contents(self, book_id: str) -> List[Dict]:
+    def get_completed_chapters_contents(self, user_id: str, book_id: str) -> List[Dict]:
         """
         Get summary contents of all completed chapters (workingFlag = False)
         Returns only the summary information, not the full chat contents
@@ -99,6 +100,7 @@ class DatabaseManager:
             # Get all completed chapters with only necessary fields
             chapters = list(self.chapters.find(
                 {
+                    "userId": user_id,
                     "bookId": book_id,
                     "workingFlag": False
                 },
@@ -153,6 +155,10 @@ class DatabaseManager:
     def update_chat_history(self, user_id: str, chapter_num: str, content: List[Dict]) -> bool:
         """
         Update chat history for a chapter
+        
+        2025-06-22 17:00
+        chat_storage collection 구조 변경 및 접근 시 bookid 추가 해야함
+        
         """
         try:
             self.chat_storage.update_one(
@@ -174,6 +180,10 @@ class DatabaseManager:
     def get_chat_history(self, user_id: str, chapter_num: str) -> Optional[List[Dict]]:
         """
         Get chat history for a chapter
+        
+        2025-06-22 17:00
+        chat_storage collection 구조 변경 및 접근 시 bookid 추가 해야함
+        
         """
         try:
             chat = self.chat_storage.find_one({
@@ -252,9 +262,9 @@ class DatabaseManager:
         except Exception as e:
             raise Exception(f"Error updating chapter music: {str(e)}")
 
-    def get_chapter_contents(self, book_id: str, chapter_num: str) -> Dict:
+    def get_chapter_contents(self, user_id: str, book_id: str, chapter_num: str) -> Dict:
         """
-        Get specific chapter contents by book_id and chapter_num
+        Get specific chapter contents by user_id, book_id and chapter_num
         Returns:
             {
                 "chapter_info": {
@@ -274,6 +284,7 @@ class DatabaseManager:
         try:
             # Get specific chapter
             chapter = self.chapters.find_one({
+                "userId": user_id,
                 "bookId": book_id,
                 "chapter_Num": chapter_num
             })
@@ -330,3 +341,14 @@ class DatabaseManager:
             return user
         except Exception as e:
             raise Exception(f"Error getting user: {str(e)}")
+
+    def get_book_info(self, user_id: str, book_id: str) -> Optional[Dict]:
+        """
+        Book Collection에서 userId, bookId로 책 정보를 조회한다.
+        반환값은 _id를 제외한 책의 모든 필드이다.
+        """
+        try:
+            book = self.books.find_one({"userId": user_id, "bookId": book_id}, {"_id": 0})
+            return book
+        except Exception as e:
+            raise Exception(f"Error getting book info: {str(e)}")

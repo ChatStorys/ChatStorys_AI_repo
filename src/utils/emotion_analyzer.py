@@ -29,10 +29,7 @@ class EmotionAnalyzer:
             if hf_api_url:
                 self.hf_api_url = hf_api_url
             else:
-                self.hf_api_url = os.getenv(
-                    "HF_EMOTION_API_URL",
-                    "https://hglww4g5jugd2khs.us-east-1.aws.endpoints.huggingface.cloud",
-                )
+                self.hf_api_url = os.getenv("HF_EMOTION_API_URL")
             print(f"Hugging Face Inference API 사용: {self.hf_api_url}")
         else:
             if use_local:

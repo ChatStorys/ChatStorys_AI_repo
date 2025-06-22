@@ -89,7 +89,7 @@ class NovelProcessor:
                 }
             
             # 2. 책 정보 확인 (사용자가 해당 책에 접근 권한이 있는지 확인)
-            book_info = self.db_manager.get_book_info(book_id)
+            book_info = self.db_manager.get_book_info(user_id, book_id)
             if not book_info:
                 return {
                     "status": "fail",
@@ -109,10 +109,10 @@ class NovelProcessor:
             
             # 4. 이전 완료된 챕터들의 summary 조회 (book_id 직접 사용)
             # 성능 향상을 위해 전체 내용이 아닌 요약만 조회
-            previous_chapters = self.db_manager.get_completed_chapters_contents(book_id=book_id)
+            previous_chapters = self.db_manager.get_completed_chapters_contents(user_id=user_id, book_id=book_id)
             
             # 5. 현재 작업 중인 챕터의 채팅 히스토리 조회 (book_id 직접 사용)
-            current_chapter = self.db_manager.get_current_chapter_contents(book_id=book_id)
+            current_chapter = self.db_manager.get_current_chapter_contents(user_id=user_id, book_id=book_id)
             
             # 6. 현재 작업 중인 챕터가 없는 경우 처리
             if not current_chapter:
@@ -183,32 +183,14 @@ class NovelProcessor:
     def finish_chapter_and_recommend_music(self, user_id: str, book_id: str) -> Dict:
         """
         챕터 완료 및 음악 추천 함수 (Hugging Face 모델 버전)
-        
         현재 작업 중인 챕터(workingFlag=True)의 내용을 요약하고 DB에 저장한 후,
         Algorithm 1을 사용하여 적절한 음악을 추천합니다.
         모든 처리가 완료되면 workingFlag를 False로 변경합니다.
-
-        매개변수:
-            user_id: 사용자의 고유 식별자
-            book_id: 책의 고유 식별자
-
-        반환값:
-            성공 시: {"status": "success", "summary": 챕터_요약, "music": 음악_정보}
-            실패 시: {"status": "error", "message": 오류_메시지}
-            
-        처리 과정:
-            1. book_id로 현재 작업 중인 챕터 조회
-            2. GPT를 통한 챕터 내용 요약 생성
-            3. 챕터에 요약 정보 저장
-            4. Algorithm 1을 이용한 음악 추천 (HF KoELECTRA + 코사인 유사도)
-            5. 챕터에 음악 정보 저장 및 workingFlag를 False로 변경
-            6. 요약 및 음악 정보 반환
         """
         try:
             print(f"[HF 모델] 챕터 완료 및 음악 추천 시작 - 사용자: {user_id}, 책: {book_id}")
-            
-            # 1. book_id로 현재 작업 중인 챕터 조회
-            current_chapter = self.db_manager.get_current_chapter_contents(book_id=book_id)
+            # 1. user_id, book_id로 현재 작업 중인 챕터 조회
+            current_chapter = self.db_manager.get_current_chapter_contents(user_id=user_id, book_id=book_id)
             if not current_chapter:
                 return {
                     "status": "fail",
@@ -274,12 +256,12 @@ class NovelProcessor:
             # 5. Algorithm 1을 사용한 음악 추천 (Hugging Face 모델)
             try:
                 # Algorithm 1: recommend_music에서 클래스 내부의 db_manager를 통해 음악 데이터베이스 조회 및 추천 처리
-                # 긴 텍스트 처리 기능 활용을 위해 전체 챕터 내용 사용 (요약 아님)
+                # 반드시 전체 챕터 내용을 기반으로 음악을 추천한다.
                 recommendations = self.music_recommender.recommend_music(
                     userID=user_id,
-                    novelContents=chapter_content_text,  # 전체 챕터 내용 사용 (긴 텍스트 처리 활용)
-                    musicDB=None,  # None으로 설정하여 내부에서 db_manager를 통해 조회
-                    N=1  # 챕터당 하나의 음악 추천
+                    novelContents=chapter_content_text,  # 반드시 전체 챕터 내용 사용
+                    musicDB=None,
+                    N=1
                 )
                 
                 if recommendations and len(recommendations) > 0:
