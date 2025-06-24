@@ -1,0 +1,57 @@
+# ChatStory AI Implementation Report
+
+This repository contains a storytelling platform integrated with emotion analysis and music recommendation.
+It uses OpenAI GPT models for story generation, KoELECTRA emotion classifier for detecting emotions, and
+MongoDB for storing novels and user data. Below is an overview of each major component.
+
+## src/api
+- **gpt_client.py** – Wraps OpenAI API. Builds prompts via `PromptTemplates`, manages chat history
+  with token limits, and exposes methods `chat_session` for chapter generation and
+  `summarize_chapter` for summarisation.
+- **rag_client.py** – Provides Retrieval‑Augmented Generation utilities. Uses FAISS vector store
+  with `OpenAIEmbeddings` to search genre requirements or similar chapters. Can initialise the store
+  from crawled text.
+
+## src/database
+- **db_manager.py** – Handles MongoDB interactions. Connects using environment variables and exposes
+  methods to fetch/update users, books, chat history and music metadata. It transforms music
+  documents into feature vectors for recommendation.
+
+## src/utils
+- **emotion_analyzer.py** – Loads a KoELECTRA model (local or HuggingFace API) and analyses Korean
+  text emotions. Returns probabilities for six emotions and helper utilities for dominant emotion
+  extraction.
+- **music_recommender.py** – Utilises `EmotionAnalyzer` to derive music feature vectors from text.
+  Implements cosine‑similarity based recommendation (`recommend_music`) and provides weight tables
+  mapping emotions to seven‑dimensional music features.
+- **prompt_templates.py** – Static templates for constructing prompts given genre information or
+  chapter context and for generating chapter summaries.
+
+## src
+- **main.py** – Central class `NovelProcessor` orchestrates the pipeline:
+  1. Retrieve summaries and chat history from MongoDB via `DatabaseManager`.
+  2. Generate story continuations using `GPTClient`.
+  3. Summarise completed chapters and recommend music with `MusicRecommender`.
+  It exposes helper functions `handle_story_continue` and `handle_chapter_summary_with_music` used by
+  the server.
+- **server.py** – FastAPI application exposing `/story/continue` and
+  `/story/chapter/summary_with_music` endpoints that call functions in `main.py`.
+
+## Root utilities
+- **music_fetcher.py** – Script for building a music feature dataset.
+  - Collects top tracks from Last.fm charts or tagged queries, retrieving artist
+    names, listeners and play counts.
+  - Searches MusicBrainz for missing MBIDs and retrieves track mood
+    probabilities (acoustic, aggressive, electronic, happy, party, relaxed,
+    sad) via the AcousticBrainz API.
+  - Saves final `music_data_with_mood.csv` that maps each track to its mood
+    feature vector.
+- **train.py** – Fine‑tunes KoELECTRA on the emotion classification dataset.
+  - Reads `train.csv`/`val.csv` under `data/`, encodes labels and tokenises text
+    for the transformer model.
+  - Configures Hugging Face `Trainer` with early stopping, mixed‑precision and
+    evaluation every few steps.
+  - Saves the trained weights, tokenizer and label classes in `outputs/`.
+
+Overall, the system ties together LLM‑driven story generation with emotion-aware music selection,
+leveraging a MongoDB backend and customizable prompts.
